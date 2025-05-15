@@ -420,4 +420,175 @@ jobs:
 
           if [ -z "$IMAGE_PATH" ]; then
             echo "Image file not found in predefined locations. Trying a broader search in kernel_platform/out..."
-            # More specific find within
+            # More specific find within common output structures
+            IMAGE_PATH=$(find ./kernel_workspace/kernel_platform/out -path "*/dist/Image" -o -path "*/boot/Image" -o -path "*/Image" -type f 2>/dev/null | head -n 1)
+            if [ -f "$IMAGE_PATH" ]; then
+                echo "Found Image with broader search at: $IMAGE_PATH"
+            fi
+          fi
+
+          if [ -z "$IMAGE_PATH" ] || [ ! -f "$IMAGE_PATH" ]; then
+            echo "Error: Kernel Image not found after searching. Build might have failed or output path is unexpected."
+            echo "Listing contents of common output directories for debugging:"
+            ls -R ./kernel_workspace/kernel_platform/out 2>/dev/null | head -n 100
+            exit 1
+          fi
+
+          cp "$IMAGE_PATH" ./AnyKernel3/Image
+          echo "Copied $IMAGE_PATH to ./AnyKernel3/Image"
+
+          # Determine the source directory for other artifacts (dtbo, dlkm etc.)
+          # This should ideally be the directory where Image was found, or a known 'dist' sibling.
+          ARTIFACT_SOURCE_DIR=$(dirname "$IMAGE_PATH")
+          # If Image was in a 'boot' subdir, the 'dist' is usually one level up.
+          if [[ "$ARTIFACT_SOURCE_DIR" == *"/boot"* ]]; then
+            ARTIFACT_SOURCE_DIR=$(dirname "$ARTIFACT_SOURCE_DIR")
+          fi
+          # Ensure it ends with /dist or is the direct dir if Image was already in dist
+          if [[ ! "$ARTIFACT_SOURCE_DIR" == *"/dist" ]]; then
+             if [ -d "$ARTIFACT_SOURCE_DIR/dist" ]; then # Check if a dist subdir exists
+                ARTIFACT_SOURCE_DIR="$ARTIFACT_SOURCE_DIR/dist"
+             elif [ -d "$(dirname "$ARTIFACT_SOURCE_DIR")/dist" ]; then # Check if parent has a dist subdir
+                ARTIFACT_SOURCE_DIR="$(dirname "$ARTIFACT_SOURCE_DIR")/dist"
+             fi
+          fi
+          echo "Using artifact source directory: $ARTIFACT_SOURCE_DIR"
+
+
+          # Optional copy of other files (dtbo, vendor_boot, dlkm images)
+          # This logic was specific to sm8750, generalize or make conditional
+          if [ "${{ github.event.inputs.CPUD == 'pineapple' || github.event.inputs.CPU == 'sm8650' || github.event.inputs.CPU == 'sm8750' }}" = "true" ]; then # Example condition
+            echo "Copying additional artifacts like dtbo, vendor_boot, dlkm..."
+            for file_pattern in dtbo.img vendor_boot.img "*dlkm*.img" "*dlkm*.erofs"; do
+              # Search in the determined artifact source directory
+              found_files=( $(find "$ARTIFACT_SOURCE_DIR" -maxdepth 1 -name "$file_pattern" -type f) )
+              for found_file in "${found_files[@]}"; do
+                if [ -f "$found_file" ]; then
+                  target_name=$(basename "$found_file")
+                  if [[ "$target_name" == *".erofs.img" ]]; then # e.g. system_dlkm.erofs.img -> system_dlkm.img
+                     target_name="${target_name/.erofs.img/.img}"
+                  elif [[ "$target_name" == *".erofs" ]]; then # e.g. system_dlkm.erofs -> system_dlkm.img
+                     target_name="${target_name/.erofs/.img}"
+                  fi
+                  echo "Copying $found_file to ./AnyKernel3/$target_name"
+                  cp "$found_file" "./AnyKernel3/$target_name"
+                fi
+              done
+            done
+          fi
+
+
+      - name: Apply patch_linux and replace Image (KPM related)
+        if: ${{ github.event.inputs.KPM == 'true' }}
+        # This step assumes Image is in a very specific path.
+        # It should operate on the ./AnyKernel3/Image or the $IMAGE_PATH
+        run: |
+          # Use the Image already copied to AnyKernel3 for consistency
+          cd ./AnyKernel3
+          if [ ! -f Image ]; then
+            echo "Error: Image not found in AnyKernel3 for KPM patching."
+            exit 1
+          fi
+          curl -LO https://raw.githubusercontent.com/Numbersf/Action-Build/main/patch_linux
+          chmod +x patch_linux
+          echo "Patching AnyKernel3/Image with patch_linux..."
+          # patch_linux might expect Image to be in current dir and output oImage
+          # Or it might modify Image in-place. Adjust based on patch_linux behavior.
+          # Assuming it creates oImage from Image in current dir:
+          ./patch_linux Image oImage # Assuming patch_linux <input> <output>
+          if [ -f oImage ]; then
+            echo "patch_linux successful, replacing Image with oImage."
+            mv oImage Image
+          else
+            echo "Warning: oImage not created by patch_linux. Original Image kept."
+            # Or exit 1 if this is critical
+          fi
+          # No need to copy back to $GITHUB_WORKSPACE/AnyKernel3/Image as we are already in it.
+          cd $GITHUB_WORKSPACE # Go back to workspace root
+
+      - name: Download Latest SUSFS Module from CI
+        if: ${{ github.event.inputs.SUSFS_CI == 'true' }}
+        run: |
+          LATEST_RUN_ID=$(curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            "https://api.github.com/repos/sidex15/susfs4ksu-module/actions/runs?status=success&event=push" | \
+            jq -r '.workflow_runs[] | select(.head_branch == "v1.5.2+") | .id' | head -n 1)
+
+          if [ -z "$LATEST_RUN_ID" ]; then
+            echo "No successful push event run found for branch v1.5.2+ on sidex15/susfs4ksu-module."
+            echo "Trying to find any successful run for the branch..."
+            LATEST_RUN_ID=$(curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+              "https://api.github.com/repos/sidex15/susfs4ksu-module/actions/runs?status=success" | \
+              jq -r '.workflow_runs[] | select(.head_branch == "v1.5.2+") | .id' | head -n 1)
+            if [ -z "$LATEST_RUN_ID" ]; then
+                echo "Still no successful run found for branch v1.5.2+. Cannot download artifact."
+                exit 1
+            fi
+          fi
+          echo "Found latest successful run ID: $LATEST_RUN_ID for branch v1.5.2+"
+
+          ARTIFACT_URL=$(curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            "https://api.github.com/repos/sidex15/susfs4ksu-module/actions/runs/$LATEST_RUN_ID/artifacts" | jq -r '.artifacts[0].archive_download_url')
+
+          if [ -z "$ARTIFACT_URL" ] || [ "$ARTIFACT_URL" = "null" ]; then
+            echo "Failed to get artifact download URL for run ID $LATEST_RUN_ID."
+            # List artifacts for debugging
+            curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+              "https://api.github.com/repos/sidex15/susfs4ksu-module/actions/runs/$LATEST_RUN_ID/artifacts"
+            exit 1
+          fi
+          echo "Downloading artifact from $ARTIFACT_URL"
+          curl -L -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" -o ksu_module_susfs.zip "$ARTIFACT_URL"
+          cp ksu_module_susfs.zip ./AnyKernel3/
+
+      - name: Download Latest SUSFS Module from Release
+        if: ${{ github.event.inputs.SUSFS_CI == 'false' }}
+        run: |
+          # The URL points to a zip with a version number in its name.
+          # Using "latest" in the URL might redirect, but the filename might still be specific.
+          # Let's try to get the tag name for "latest" and construct the filename.
+          LATEST_TAG=$(curl -s https://api.github.com/repos/sidex15/ksu_module_susfs/releases/latest | jq -r .tag_name)
+          if [ -z "$LATEST_TAG" ] || [ "$LATEST_TAG" = "null" ]; then
+            echo "Could not determine latest release tag. Falling back to fixed name."
+            LATEST_TAG="1.5.2+" # Fallback or ensure this matches expected name
+          fi
+          # Construct filename, assuming it matches the tag or a known pattern
+          # Example: ksu_module_susfs_v1.5.2+.zip or ksu_module_susfs_1.5.2+.zip
+          # The original script used a hardcoded name, which is safer if the release name pattern is fixed.
+          DOWNLOAD_FILENAME="ksu_module_susfs_1.5.2+.zip" # As per original script
+          echo "Attempting to download $DOWNLOAD_FILENAME from latest release..."
+          wget https://github.com/sidex15/ksu_module_susfs/releases/latest/download/$DOWNLOAD_FILENAME
+          if [ -f "$DOWNLOAD_FILENAME" ]; then
+            cp "$DOWNLOAD_FILENAME" ./AnyKernel3/
+          else
+            echo "Failed to download $DOWNLOAD_FILENAME. Please check release assets."
+            exit 1
+          fi
+
+      - name: Set suffix
+        id: suffix
+        run: |
+          current_suffix=""
+          if [ "${{ github.event.inputs.KPM }}" = "true" ]; then
+            current_suffix="${current_suffix}_KPM"
+          fi
+          if [ "${{ github.event.inputs.VFS }}" = "true" ]; then
+            current_suffix="${current_suffix}_VFS"
+          fi
+          if [ "${{ github.event.inputs.ZRAM }}" = "true" ]; then
+            current_suffix="${current_suffix}_LZ4KD"
+          fi
+          echo "value=$current_suffix" >> $GITHUB_OUTPUT
+
+      - name: Remove _uv suffix from FEIL
+        id: feil_clean
+        run: |
+          clean_feil="${{ github.event.inputs.FEIL }}"
+          clean_feil="${clean_feil%_v}"  # 去掉结尾的 _v（如果有）
+          clean_feil="${clean_feil%_u}"  # 去掉结尾的 _u（如果有）
+          echo "value=$clean_feil" >> $GITHUB_OUTPUT
+
+      - name: Upload AnyKernel3
+        uses: actions/upload-artifact@v4
+        with:
+          name: AnyKernel3_SukiSUUltra_${{ env.KSUVER }}_${{ steps.feil_clean.outputs.value }}${{ steps.suffix.outputs.value }}
+          path: ./AnyKernel3/*
