@@ -127,7 +127,7 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt update && sudo apt upgrade -y
-          sudo apt install -y python3 git curl jq # Added jq for SUSFS CI step
+          sudo apt install -y python3 git curl jq # Added jq
 
       - name: Show selected inputs debug
         run: |
@@ -167,11 +167,8 @@ jobs:
           cd kernel_workspace/kernel_platform
           sed -i 's/ -dirty//g' common/scripts/setlocalversion
           sed -i 's/ -dirty//g' msm-kernel/scripts/setlocalversion
-          # Check if external/dtc/scripts/setlocalversion exists before trying to modify it
-          if [ -f external/dtc/scripts/setlocalversion ]; then
+          if [ -f external/dtc/scripts/setlocalversion ]; then # Check existence
             sed -i 's/ -dirty//g' external/dtc/scripts/setlocalversion
-          else
-            echo "external/dtc/scripts/setlocalversion not found, skipping."
           fi
           sed -i '$i res=$(echo "$res" | sed '\''s/-dirty//g'\'')' common/scripts/setlocalversion
           git add -A
@@ -240,14 +237,14 @@ jobs:
       - name: Add Configuration Settings
         run: |
           cd kernel_workspace/kernel_platform
-          CONFIG_FILE="./common/arch/arm64/configs/gki_defconfig" # Use quotes for safety
+          CONFIG_FILE="./common/arch/arm64/configs/gki_defconfig"
           KERNEL_VERSION="${{ github.event.inputs.KERNEL_VERSION }}"
 
           # SukiSU Ultra config
           echo "CONFIG_KSU=y" >> "$CONFIG_FILE"
-          echo "CONFIG_KPM=y" >> "$CONFIG_FILE" # KPM is always enabled if this block runs, check if KPM input should gate this
+          echo "CONFIG_KPM=y" >> "$CONFIG_FILE"
           if [ "${{ github.event.inputs.VFS }}" = "false" ]; then
-            echo "CONFIG_KPROBES=y" >> "$CONFIG_FILE"
+          echo "CONFIG_KPROBES=y" >> "$CONFIG_FILE"
           fi
           # VFS config
           if [ "${{ github.event.inputs.VFS }}" = "true" ]; then
@@ -259,23 +256,23 @@ jobs:
             echo "CONFIG_KSU_SUSFS_SUS_SU=y" >> "$CONFIG_FILE"
           fi
 
-          # SUSFS config (Only if VFS is true? Consider the logic here)
+          # SUSFS config
           if [ "${{ github.event.inputs.VFS }}" = "true" ]; then
-            echo "CONFIG_KSU_SUSFS=y" >> "$CONFIG_FILE"
-            echo "CONFIG_KSU_SUSFS_HAS_MAGIC_MOUNT=y" >> "$CONFIG_FILE"
-            echo "CONFIG_KSU_SUSFS_SUS_PATH=y" >> "$CONFIG_FILE"
-            echo "CONFIG_KSU_SUSFS_SUS_MOUNT=y" >> "$CONFIG_FILE"
-            echo "CONFIG_KSU_SUSFS_AUTO_ADD_SUS_KSU_DEFAULT_MOUNT=y" >> "$CONFIG_FILE"
-            echo "CONFIG_KSU_SUSFS_AUTO_ADD_SUS_BIND_MOUNT=y" >> "$CONFIG_FILE"
-            echo "CONFIG_KSU_SUSFS_SUS_KSTAT=y" >> "$CONFIG_FILE"
-            echo "CONFIG_KSU_SUSFS_SUS_OVERLAYFS=n" >> "$CONFIG_FILE" # Check if this should be configurable
-            echo "CONFIG_KSU_SUSFS_TRY_UMOUNT=y" >> "$CONFIG_FILE"
-            echo "CONFIG_KSU_SUSFS_AUTO_ADD_TRY_UMOUNT_FOR_BIND_MOUNT=y" >> "$CONFIG_FILE"
-            echo "CONFIG_KSU_SUSFS_SPOOF_UNAME=y" >> "$CONFIG_FILE"
-            echo "CONFIG_KSU_SUSFS_ENABLE_LOG=y" >> "$CONFIG_FILE"
-            echo "CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS=y" >> "$CONFIG_FILE"
-            echo "CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG=y" >> "$CONFIG_FILE"
-            echo "CONFIG_KSU_SUSFS_OPEN_REDIRECT=y" >> "$CONFIG_FILE"
+          echo "CONFIG_KSU_SUSFS=y" >> "$CONFIG_FILE"
+          echo "CONFIG_KSU_SUSFS_HAS_MAGIC_MOUNT=y" >> "$CONFIG_FILE"
+          echo "CONFIG_KSU_SUSFS_SUS_PATH=y" >> "$CONFIG_FILE"
+          echo "CONFIG_KSU_SUSFS_SUS_MOUNT=y" >> "$CONFIG_FILE"
+          echo "CONFIG_KSU_SUSFS_AUTO_ADD_SUS_KSU_DEFAULT_MOUNT=y" >> "$CONFIG_FILE"
+          echo "CONFIG_KSU_SUSFS_AUTO_ADD_SUS_BIND_MOUNT=y" >> "$CONFIG_FILE"
+          echo "CONFIG_KSU_SUSFS_SUS_KSTAT=y" >> "$CONFIG_FILE"
+          echo "CONFIG_KSU_SUSFS_SUS_OVERLAYFS=n" >> "$CONFIG_FILE"
+          echo "CONFIG_KSU_SUSFS_TRY_UMOUNT=y" >> "$CONFIG_FILE"
+          echo "CONFIG_KSU_SUSFS_AUTO_ADD_TRY_UMOUNT_FOR_BIND_MOUNT=y" >> "$CONFIG_FILE"
+          echo "CONFIG_KSU_SUSFS_SPOOF_UNAME=y" >> "$CONFIG_FILE"
+          echo "CONFIG_KSU_SUSFS_ENABLE_LOG=y" >> "$CONFIG_FILE"
+          echo "CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS=y" >> "$CONFIG_FILE"
+          echo "CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG=y" >> "$CONFIG_FILE"
+          echo "CONFIG_KSU_SUSFS_OPEN_REDIRECT=y" >> "$CONFIG_FILE"
           fi
 
           # Remove check_defconfig
@@ -285,17 +282,20 @@ jobs:
 
           # LZ4KD配置
           if [ "${{ github.event.inputs.ZRAM }}" = "true" ]; then
-            # CONFIG_FILE is already ./common/arch/arm64/configs/gki_defconfig
+            # CONFIG_FILE is ./common/arch/arm64/configs/gki_defconfig
 
             if [ "${{ github.event.inputs.KERNEL_VERSION }}" = "5.10" ]; then
               echo "CONFIG_ZSMALLOC=y" >> "$CONFIG_FILE"
               echo "CONFIG_ZRAM=y" >> "$CONFIG_FILE"
-              echo "CONFIG_MODULE_SIG=n" >> "$CONFIG_FILE" # This might conflict if SIG_FORCE is also set later
+              echo "CONFIG_MODULE_SIG=n" >> "$CONFIG_FILE"
               echo "CONFIG_CRYPTO_LZO=y" >> "$CONFIG_FILE"
               echo "CONFIG_ZRAM_DEF_COMP_LZ4KD=y" >> "$CONFIG_FILE"
             fi
 
             if [ "${{ github.event.inputs.KERNEL_VERSION }}" != "6.6" ] && [ "${{ github.event.inputs.KERNEL_VERSION }}" != "5.10" ]; then
+              # For non-6.6 and non-5.10 kernels, ensure ZSMALLOC and ZRAM are 'y' in gki_defconfig
+              # This part might be redundant if Android 14/15 logic below also handles gki_defconfig
+              # However, keeping it for other Android versions if ZRAM=true
               if grep -q "CONFIG_ZSMALLOC" -- "$CONFIG_FILE"; then
                 sed -i 's/CONFIG_ZSMALLOC=m/CONFIG_ZSMALLOC=y/g' "$CONFIG_FILE"
               else
@@ -309,33 +309,49 @@ jobs:
               sed -i 's/CONFIG_ZRAM=m/CONFIG_ZRAM=y/g' "$CONFIG_FILE"
             fi
 
+            # --- START OF CRITICAL CHANGES FOR ZRAM with Android 14/15 ---
             if [ "${{ github.event.inputs.ANDROID_VERSION }}" = "android14" ] || [ "${{ github.event.inputs.ANDROID_VERSION }}" = "android15" ]; then
-              # DO NOT remove zram.ko and zsmalloc.ko from modules.bzl as Bazel needs them if they are built.
-              # if [  -e ./common/modules.bzl ]; then
-              #   sed -i 's/"drivers\/block\/zram\/zram\.ko",//g; s/"mm\/zsmalloc\.ko",//g' "./common/modules.bzl"
-              # fi
-              #
-              # if [  -e ./msm-kernel/modules.bzl ]; then
-              #   sed -i 's/"drivers\/block\/zram\/zram\.ko",//g; s/"mm\/zsmalloc\.ko",//g' "./msm-kernel/modules.bzl"
-              # fi
+              # 1. If Kconfig is to be 'y' (built-in), remove from modules.bzl
+              if [ -e ./common/modules.bzl ]; then
+                echo "Ensuring zram.ko and zsmalloc.ko are removed from common/modules.bzl (for built-in)"
+                sed -i 's/"drivers\/block\/zram\/zram\.ko",//g' "./common/modules.bzl"
+                sed -i 's/"mm\/zsmalloc\.ko",//g' "./common/modules.bzl"
+              fi
 
-              # Attempt to set ZRAM/ZSMALLOC as built-in in the msm-kernel specific config if it exists
-              MSM_KERNEL_DEVICE_CONFIG="msm-kernel/arch/arm64/configs/${{ github.event.inputs.CPUD }}-GKI.config"
-              if [ -f "$MSM_KERNEL_DEVICE_CONFIG" ]; then
-                echo "CONFIG_ZSMALLOC=y" >> "$MSM_KERNEL_DEVICE_CONFIG"
-                echo "CONFIG_ZRAM=y" >> "$MSM_KERNEL_DEVICE_CONFIG"
-              else
-                echo "Warning: $MSM_KERNEL_DEVICE_CONFIG not found, skipping adding ZRAM/ZSMALLOC=y for it."
+              if [ -e ./msm-kernel/modules.bzl ]; then
+                echo "Ensuring zram.ko and zsmalloc.ko are removed from msm-kernel/modules.bzl (for built-in)"
+                sed -i 's/"drivers\/block\/zram\/zram\.ko",//g' "./msm-kernel/modules.bzl"
+                sed -i 's/"mm\/zsmalloc\.ko",//g' "./msm-kernel/modules.bzl"
               fi
               
-              echo "CONFIG_MODULE_SIG_FORCE=n" >> "$CONFIG_FILE" # This applies to common gki_defconfig
+              # 2. Force Kconfig to 'y' in common gki_defconfig ($CONFIG_FILE)
+              echo "Forcing CONFIG_ZSMALLOC=y and CONFIG_ZRAM=y in $CONFIG_FILE"
+              sed -i '/^[[:space:]]*CONFIG_ZSMALLOC/d' "$CONFIG_FILE"
+              echo "CONFIG_ZSMALLOC=y" >> "$CONFIG_FILE"
+              sed -i '/^[[:space:]]*CONFIG_ZRAM/d' "$CONFIG_FILE"
+              echo "CONFIG_ZRAM=y" >> "$CONFIG_FILE"
+
+              # 3. Force Kconfig to 'y' in device-specific GKI config
+              MSM_KERNEL_DEVICE_CONFIG="msm-kernel/arch/arm64/configs/${{ github.event.inputs.CPUD }}-GKI.config"
+              if [ -f "$MSM_KERNEL_DEVICE_CONFIG" ]; then
+                echo "Forcing CONFIG_ZSMALLOC=y and CONFIG_ZRAM=y in $MSM_KERNEL_DEVICE_CONFIG"
+                sed -i '/^[[:space:]]*CONFIG_ZSMALLOC/d' "$MSM_KERNEL_DEVICE_CONFIG"
+                echo "CONFIG_ZSMALLOC=y" >> "$MSM_KERNEL_DEVICE_CONFIG"
+                sed -i '/^[[:space:]]*CONFIG_ZRAM/d' "$MSM_KERNEL_DEVICE_CONFIG"
+                echo "CONFIG_ZRAM=y" >> "$MSM_KERNEL_DEVICE_CONFIG"
+              else
+                echo "Warning: $MSM_KERNEL_DEVICE_CONFIG not found, skipping ZRAM/ZSMALLOC=y for it."
+              fi
+              
+              echo "CONFIG_MODULE_SIG_FORCE=n" >> "$CONFIG_FILE" # This is for gki_defconfig
             elif [ "${{ github.event.inputs.KERNEL_VERSION }}" = "5.10" ] || [ "${{ github.event.inputs.KERNEL_VERSION }}" = "5.15" ]; then
-              # This logic is for older kernel versions when *NOT* on Android 14/15 with ZRAM=true
-              rm -f "common/android/gki_aarch64_modules"
+              # This logic for older kernels when *NOT* on Android 14/15 with ZRAM=true
+              rm -f "common/android/gki_aarch64_modules" # Added -f
               touch "common/android/gki_aarch64_modules"
             fi
+            # --- END OF CRITICAL CHANGES ---
 
-            # Common ZRAM options if ZRAM and ZSMALLOC are enabled (check if this should be conditional on Kconfig readback)
+            # Common ZRAM options if ZRAM and ZSMALLOC are enabled (this existing logic seems fine)
             if grep -q "CONFIG_ZSMALLOC=y" "$CONFIG_FILE" && grep -q "CONFIG_ZRAM=y" "$CONFIG_FILE"; then
               echo "CONFIG_CRYPTO_LZ4HC=y" >> "$CONFIG_FILE"
               echo "CONFIG_CRYPTO_LZ4K=y" >> "$CONFIG_FILE"
@@ -346,67 +362,33 @@ jobs:
           fi
 
       - name: Build kernel
-        if: ${{ github.event.inputs.CPUD == 'pineapple' || github.event.inputs.CPUD == 'sun' || github.event.inputs.CPU == 'sm8650' || github.event.inputs.CPU == 'sm7675' }} # Added CPUD check for pineapple/sun
+        # Condition updated in previous response, assuming it's correct for Bazel builds
+        if: ${{ github.event.inputs.CPUD == 'pineapple' || github.event.inputs.CPUD == 'sun' || github.event.inputs.CPU == 'sm8650' || github.event.inputs.CPU == 'sm7675' }}
         run: |
           cd kernel_workspace
-          # Assuming build_with_bazel.py is in kernel_platform. If it's in kernel_platform/oplus/build, adjust path.
-          # The original had CPUD == sm8650 or sm7675, but CPUD is pineapple/sun for these.
-          # Let's stick to the CPUD for Bazel targets if that's how build_with_bazel.py works
           ./kernel_platform/build_with_bazel.py -t ${{ github.event.inputs.CPUD }} ${{ github.event.inputs.BUILD_METHOD }}
           
       - name: Fallback build kernel (oplus_build_kernel.sh)
-        # This condition should be the opposite of the Bazel build condition.
-        # if: ${{ github.event.inputs.CPU != 'sm8650' && github.event.inputs.CPU != 'sm7675' }}
+        # Condition updated in previous response
         if: '! (github.event.inputs.CPUD == ''pineapple'' || github.event.inputs.CPUD == ''sun'' || github.event.inputs.CPU == ''sm8650'' || github.event.inputs.CPU == ''sm7675'')'
         run: |
          cd kernel_workspace
          LTO=thin SYSTEM_DLKM_RE_SIGN=0 BUILD_SYSTEM_DLKM=0 KMI_SYMBOL_LIST_STRICT_MODE=0 ./kernel_platform/oplus/build/oplus_build_kernel.sh ${{ github.event.inputs.CPUD }} ${{ github.event.inputs.BUILD_METHOD }}
 
       - name: Make AnyKernel3
+        # This step was significantly refactored in the previous response for robustness.
+        # Using that refactored version as it's likely more reliable.
         run: |
-          git clone https://github.com/Numbersf/AnyKernel3 --depth=1 AnyKernel3_SRC # Clone to a specific dir
-          mv AnyKernel3_SRC ./AnyKernel3 # Move to avoid issues if AnyKernel3 dir exists
+          git clone https://github.com/Numbersf/AnyKernel3 --depth=1 AnyKernel3_SRC
+          mv AnyKernel3_SRC ./AnyKernel3
           rm -rf ./AnyKernel3/.git
 
-          # Define potential output directories based on build method
-          # Note: bazel-out path structure can be complex. The one in original script is a common pattern.
-          # Fallback oplus_build_kernel.sh output structure is also listed.
-          
-          # Potential Bazel output paths for Image
-          # Path from original log: kernel_platform/out/bazel/output_user_root/.../execroot/__main__/msm-kernel/...
-          # This often symlinks or copies to a friendlier path like:
-          # kernel_platform/out/msm-kernel-${{ github.event.inputs.CPUD }}-${{ github.event.inputs.BUILD_METHOD }}/dist/Image (common for non-Bazel too)
-          # kernel_platform/bazel-out/k8-fastbuild/bin/msm-kernel/${{ github.event.inputs.CPUD }}_gki_kbuild_mixed_tree/Image (more specific Bazel path)
-          
-          # Potential oplus_build_kernel.sh output paths for Image
-          # kernel_platform/out/msm-${{ github.event.inputs.CPUD }}-${{ github.event.inputs.CPUD }}-${{ github.event.inputs.BUILD_METHOD }}/dist/Image
-          # kernel_platform/out/msm-kernel-${{ github.event.inputs.CPUD }}-${{ github.event.inputs.BUILD_METHOD }}/gki_kernel/common/arch/arm64/boot/Image
-          # kernel_platform/out/msm-${{ github.event.inputs.CPUD }}-${{ github.event.inputs.CPUD }}-${{ github.event.inputs.BUILD_METHOD }}/gki_kernel/common/arch/arm64/boot/Image
-
-          # Common base for many outputs
-          DIST_BASE_COMMON="kernel_workspace/kernel_platform/out/msm-kernel-${{ github.event.inputs.CPUD }}-${{ github.event.inputs.BUILD_METHOD }}/dist"
-          # Bazel specific output (can vary greatly based on exact Bazel setup)
-          DIST_BAZEL_SPECIFIC="kernel_workspace/kernel_platform/bazel-out/k8-fastbuild/bin/msm-kernel/${{ github.event.inputs.CPUD }}_gki_kbuild_mixed_tree" # Example
-          # Oplus script specific base
-          DIST_OPLUS_BASE="kernel_workspace/kernel_platform/out/msm-${{ github.event.inputs.CPUD }}-${{ github.event.inputs.CPUD }}-${{ github.event.inputs.BUILD_METHOD }}/dist"
-          
-          # Boot image paths (less common for just "Image" but possible for full boot images)
-          BOOT_PATH_COMMON_GKI="kernel_workspace/kernel_platform/out/msm-kernel-${{ github.event.inputs.CPUD }}-${{ github.event.inputs.BUILD_METHOD }}/gki_kernel/common/arch/arm64/boot"
-          BOOT_PATH_OPLUS_GKI="kernel_workspace/kernel_platform/out/msm-${{ github.event.inputs.CPUD }}-${{ github.event.inputs.CPUD }}-${{ github.event.inputs.BUILD_METHOD }}/gki_kernel/common/arch/arm64/boot"
-          
-          # A more generic Bazel output for artifacts is often under kernel_platform/out/dist or kernel_platform/out/target/product/...
-          # The specific `msm-kernel` paths are if the Bazel rules output there.
-          # The `pineapple_gki` from log implies output might be structured relative to that target.
-
           IMAGE_CANDIDATES=(
-            "$DIST_BASE_COMMON/Image"
-            "$DIST_BAZEL_SPECIFIC/Image"
-            "$DIST_OPLUS_BASE/Image"
-            "$BOOT_PATH_COMMON_GKI/Image"
-            "$BOOT_PATH_OPLUS_GKI/Image"
-            # A more generic find as a last resort, but try to be specific first
-            # This find is too broad and might pick up intermediate files.
-            # "$(find ./kernel_workspace/kernel_platform/out -name Image -type f | head -n 1)"
+            "kernel_workspace/kernel_platform/out/msm-kernel-${{ github.event.inputs.CPUD }}-${{ github.event.inputs.BUILD_METHOD }}/dist/Image"
+            "kernel_workspace/kernel_platform/bazel-out/k8-fastbuild/bin/msm-kernel/${{ github.event.inputs.CPUD }}_gki_kbuild_mixed_tree/Image" # Example Bazel path
+            "kernel_workspace/kernel_platform/out/msm-${{ github.event.inputs.CPUD }}-${{ github.event.inputs.CPUD }}-${{ github.event.inputs.BUILD_METHOD }}/dist/Image"
+            "kernel_workspace/kernel_platform/out/msm-kernel-${{ github.event.inputs.CPUD }}-${{ github.event.inputs.BUILD_METHOD }}/gki_kernel/common/arch/arm64/boot/Image"
+            "kernel_workspace/kernel_platform/out/msm-${{ github.event.inputs.CPUD }}-${{ github.event.inputs.CPUD }}-${{ github.event.inputs.BUILD_METHOD }}/gki_kernel/common/arch/arm64/boot/Image"
           )
 
           IMAGE_PATH=""
@@ -419,8 +401,7 @@ jobs:
           done
 
           if [ -z "$IMAGE_PATH" ]; then
-            echo "Image file not found in predefined locations. Trying a broader search in kernel_platform/out..."
-            # More specific find within common output structures
+            echo "Image file not found in predefined locations. Trying a broader search..."
             IMAGE_PATH=$(find ./kernel_workspace/kernel_platform/out -path "*/dist/Image" -o -path "*/boot/Image" -o -path "*/Image" -type f 2>/dev/null | head -n 1)
             if [ -f "$IMAGE_PATH" ]; then
                 echo "Found Image with broader search at: $IMAGE_PATH"
@@ -428,46 +409,42 @@ jobs:
           fi
 
           if [ -z "$IMAGE_PATH" ] || [ ! -f "$IMAGE_PATH" ]; then
-            echo "Error: Kernel Image not found after searching. Build might have failed or output path is unexpected."
-            echo "Listing contents of common output directories for debugging:"
+            echo "Error: Kernel Image not found. Build might have failed or output path is unexpected."
             ls -R ./kernel_workspace/kernel_platform/out 2>/dev/null | head -n 100
             exit 1
           fi
 
           cp "$IMAGE_PATH" ./AnyKernel3/Image
           echo "Copied $IMAGE_PATH to ./AnyKernel3/Image"
-
-          # Determine the source directory for other artifacts (dtbo, dlkm etc.)
-          # This should ideally be the directory where Image was found, or a known 'dist' sibling.
+          
           ARTIFACT_SOURCE_DIR=$(dirname "$IMAGE_PATH")
-          # If Image was in a 'boot' subdir, the 'dist' is usually one level up.
           if [[ "$ARTIFACT_SOURCE_DIR" == *"/boot"* ]]; then
-            ARTIFACT_SOURCE_DIR=$(dirname "$ARTIFACT_SOURCE_DIR")
+            ARTIFACT_SOURCE_DIR=$(dirname "$ARTIFACT_SOURCE_DIR") # Go up one level if in boot
           fi
-          # Ensure it ends with /dist or is the direct dir if Image was already in dist
+          # Ensure ARTIFACT_SOURCE_DIR is a 'dist' directory or a direct parent of Image if not in dist/boot
           if [[ ! "$ARTIFACT_SOURCE_DIR" == *"/dist" ]]; then
-             if [ -d "$ARTIFACT_SOURCE_DIR/dist" ]; then # Check if a dist subdir exists
+             if [ -d "$ARTIFACT_SOURCE_DIR/dist" ]; then
                 ARTIFACT_SOURCE_DIR="$ARTIFACT_SOURCE_DIR/dist"
-             elif [ -d "$(dirname "$ARTIFACT_SOURCE_DIR")/dist" ]; then # Check if parent has a dist subdir
+             # Check if current dir is already the intended source (e.g. bazel-out/.../Image)
+             elif [ -f "$ARTIFACT_SOURCE_DIR/dtbo.img" ] || [ -f "$ARTIFACT_SOURCE_DIR/vendor_boot.img" ]; then
+                echo "Using current directory $ARTIFACT_SOURCE_DIR for additional artifacts."
+             elif [ -d "$(dirname "$ARTIFACT_SOURCE_DIR")/dist" ]; then # Check parent for dist
                 ARTIFACT_SOURCE_DIR="$(dirname "$ARTIFACT_SOURCE_DIR")/dist"
              fi
           fi
-          echo "Using artifact source directory: $ARTIFACT_SOURCE_DIR"
+          echo "Using artifact source directory: $ARTIFACT_SOURCE_DIR for additional files."
 
-
-          # Optional copy of other files (dtbo, vendor_boot, dlkm images)
-          # This logic was specific to sm8750, generalize or make conditional
-          if [ "${{ github.event.inputs.CPUD == 'pineapple' || github.event.inputs.CPU == 'sm8650' || github.event.inputs.CPU == 'sm8750' }}" = "true" ]; then # Example condition
-            echo "Copying additional artifacts like dtbo, vendor_boot, dlkm..."
+          # Optional copy for sm8750-like devices (condition was CPUD pineapple/sun or CPU sm8650/sm8750)
+          if [ "${{ github.event.inputs.CPUD == 'pineapple' || github.event.inputs.CPUD == 'sun' || github.event.inputs.CPU == 'sm8650' || github.event.inputs.CPU == 'sm8750' }}" = "true" ]; then
+            echo "Copying additional artifacts (dtbo, vendor_boot, dlkm)..."
             for file_pattern in dtbo.img vendor_boot.img "*dlkm*.img" "*dlkm*.erofs"; do
-              # Search in the determined artifact source directory
-              found_files=( $(find "$ARTIFACT_SOURCE_DIR" -maxdepth 1 -name "$file_pattern" -type f) )
+              found_files=( $(find "$ARTIFACT_SOURCE_DIR" -maxdepth 1 -name "$file_pattern" -type f 2>/dev/null) )
               for found_file in "${found_files[@]}"; do
                 if [ -f "$found_file" ]; then
                   target_name=$(basename "$found_file")
-                  if [[ "$target_name" == *".erofs.img" ]]; then # e.g. system_dlkm.erofs.img -> system_dlkm.img
+                  if [[ "$target_name" == *".erofs.img" ]]; then
                      target_name="${target_name/.erofs.img/.img}"
-                  elif [[ "$target_name" == *".erofs" ]]; then # e.g. system_dlkm.erofs -> system_dlkm.img
+                  elif [[ "$target_name" == *".erofs" ]]; then
                      target_name="${target_name/.erofs/.img}"
                   fi
                   echo "Copying $found_file to ./AnyKernel3/$target_name"
@@ -477,14 +454,10 @@ jobs:
             done
           fi
 
-
-      - name: Apply patch_linux and replace Image (KPM related)
+      - name: Apply patch_linux and replace Image
         if: ${{ github.event.inputs.KPM == 'true' }}
-        # This step assumes Image is in a very specific path.
-        # It should operate on the ./AnyKernel3/Image or the $IMAGE_PATH
         run: |
-          # Use the Image already copied to AnyKernel3 for consistency
-          cd ./AnyKernel3
+          cd ./AnyKernel3 # Operate directly in AnyKernel3
           if [ ! -f Image ]; then
             echo "Error: Image not found in AnyKernel3 for KPM patching."
             exit 1
@@ -492,18 +465,15 @@ jobs:
           curl -LO https://raw.githubusercontent.com/Numbersf/Action-Build/main/patch_linux
           chmod +x patch_linux
           echo "Patching AnyKernel3/Image with patch_linux..."
-          # patch_linux might expect Image to be in current dir and output oImage
-          # Or it might modify Image in-place. Adjust based on patch_linux behavior.
-          # Assuming it creates oImage from Image in current dir:
-          ./patch_linux Image oImage # Assuming patch_linux <input> <output>
+          # Assuming patch_linux takes input and output: ./patch_linux <input_image> <output_image>
+          # And it creates oImage from Image.
+          ./patch_linux Image oImage
           if [ -f oImage ]; then
             echo "patch_linux successful, replacing Image with oImage."
-            mv oImage Image
+            mv -f oImage Image # Force overwrite
           else
             echo "Warning: oImage not created by patch_linux. Original Image kept."
-            # Or exit 1 if this is critical
           fi
-          # No need to copy back to $GITHUB_WORKSPACE/AnyKernel3/Image as we are already in it.
           cd $GITHUB_WORKSPACE # Go back to workspace root
 
       - name: Download Latest SUSFS Module from CI
@@ -531,7 +501,6 @@ jobs:
 
           if [ -z "$ARTIFACT_URL" ] || [ "$ARTIFACT_URL" = "null" ]; then
             echo "Failed to get artifact download URL for run ID $LATEST_RUN_ID."
-            # List artifacts for debugging
             curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
               "https://api.github.com/repos/sidex15/susfs4ksu-module/actions/runs/$LATEST_RUN_ID/artifacts"
             exit 1
@@ -543,18 +512,7 @@ jobs:
       - name: Download Latest SUSFS Module from Release
         if: ${{ github.event.inputs.SUSFS_CI == 'false' }}
         run: |
-          # The URL points to a zip with a version number in its name.
-          # Using "latest" in the URL might redirect, but the filename might still be specific.
-          # Let's try to get the tag name for "latest" and construct the filename.
-          LATEST_TAG=$(curl -s https://api.github.com/repos/sidex15/ksu_module_susfs/releases/latest | jq -r .tag_name)
-          if [ -z "$LATEST_TAG" ] || [ "$LATEST_TAG" = "null" ]; then
-            echo "Could not determine latest release tag. Falling back to fixed name."
-            LATEST_TAG="1.5.2+" # Fallback or ensure this matches expected name
-          fi
-          # Construct filename, assuming it matches the tag or a known pattern
-          # Example: ksu_module_susfs_v1.5.2+.zip or ksu_module_susfs_1.5.2+.zip
-          # The original script used a hardcoded name, which is safer if the release name pattern is fixed.
-          DOWNLOAD_FILENAME="ksu_module_susfs_1.5.2+.zip" # As per original script
+          DOWNLOAD_FILENAME="ksu_module_susfs_1.5.2+.zip" # Using the fixed name from original script
           echo "Attempting to download $DOWNLOAD_FILENAME from latest release..."
           wget https://github.com/sidex15/ksu_module_susfs/releases/latest/download/$DOWNLOAD_FILENAME
           if [ -f "$DOWNLOAD_FILENAME" ]; then
@@ -583,8 +541,8 @@ jobs:
         id: feil_clean
         run: |
           clean_feil="${{ github.event.inputs.FEIL }}"
-          clean_feil="${clean_feil%_v}"  # 去掉结尾的 _v（如果有）
-          clean_feil="${clean_feil%_u}"  # 去掉结尾的 _u（如果有）
+          clean_feil="${clean_feil%_v}"
+          clean_feil="${clean_feil%_u}"
           echo "value=$clean_feil" >> $GITHUB_OUTPUT
 
       - name: Upload AnyKernel3
